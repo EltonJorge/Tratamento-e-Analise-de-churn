@@ -1,0 +1,1617 @@
+---
+title: "Relatório da Telecomx"
+subtitle: "Análise de Churn de sua Base de Clientes"
+author: "Elton de Oliveira Jorge"
+date: today
+lang: pt-BR
+format:
+  html:
+    toc: true
+    toc-title: "Sumário"
+    number-sections: true
+
+jupyter:
+  kernel: python3
+
+execute:
+  echo: false
+---
+
+
+::: cell
+```{=html}
+<style>
+p {
+  text-indent: 2em;    /* define recuo na primeira linha do parágrafo */
+  text-align: justify; /* opcional: justifica o texto */
+}
+</style>
+```
+:::
+
+## Introduçao
+
+A retenção de clientes é um dos principais desafios enfrentados por empresas do setor de telecomunicações, onde a concorrência é intensa e o comportamento do consumidor é altamente sensível à qualidade do serviço.Diante desse cenário, a equipe de Machine Learning da Telecomx solicitou a elaboração de um diagnóstico exploratorio com o objetivo de entender os fatores associados à evasão de clientes(Churn).
+
+Este relatório apresenta uma análise descritiva da base de dados da Telecomx, abordando características demográficas, composição familiar, tipos de contrato, serviços contratados, formas de pagamento e perfil de consumo. O foco principal é identificar padrões de comportamento entre clientes ativos e evadidos, a fim de gerar insights que possam subsidiar estratégias de retenção mais eficazes.
+
+Além disso, foram observadas correlações relevantes entre determinadoas variáveis e a taxa de churn - como faixa etaria, tipo de conexão à internet, duração de contrato e forma de pagamento, o que aponta para oportunidades claras de intervenção comercias e aprimoramento nos serviços prestados.
+
+## Objetivos
+
+Este relatório foi elaborado a partir de uma solicitação da equipe de Machine Learning, com o objetivo de realizar o tratamento e a análise exploratória dos dados de clientes da Telecomx, com foco na taxa de evasão(churn)
+
+### Análise Exploratoria dos Dados
+
+Com o objetivo de diagnosticar as possiveis causas da elevada taxa de evasão(Churn) na base de clientes da **Telecomx**, realizamos uma análise exploratória utilizando a linguagem de programaçao **Python**. Para o tratamento e manipulação dos dados, foram empregadas as bibliotecas **Pandas** e **NumPy**. Já para a visualização e interpretação gráfica das métricas, utilizamos ferramentas de data visualization com **Matplotlib**, **Seaborn** e **Plotly**, permitindo o desenvolvimento de painés analíticos e gráficos interativos que facilitaram a identificação de padrões e tendências.
+
+```{python}
+
+#importando a biblioteca
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from matplotlib.ticker import MultipleLocator
+
+```
+
+```{python}
+url = "https://raw.githubusercontent.com/ingridcristh/challenge2-data-science/refs/heads/main/TelecomX_Data.json"
+```
+
+```{python}
+#baixando os dados de arquivo formato json
+telecomx = pd.read_json(url)
+
+```
+
+```{python}
+#normalizando e desaninhando os dados da colunas
+telecomx = pd.json_normalize(telecomx.to_dict(orient = "records"))
+
+
+```
+
+```{python}
+#Verificando as colunas com espaço em brancos
+espacos_em_branco = telecomx.apply(lambda x: x.astype(str).str.strip() == '').sum()
+
+```
+
+```{python}
+#Transformando a coluna account.Charges.Total em coluna em tipo float
+telecomx["account.Charges.Total"] = pd.to_numeric(telecomx["account.Charges.Total"], errors = "coerce")
+
+#Tratando a coluna churn, substituindo os espaços em brancos por nan
+telecomx["Churn"] = telecomx["Churn"].replace(r'^\s*$',np.nan, regex= True)
+
+```
+
+```{python}
+telecomx = telecomx.rename(columns ={"customerID": "ID_cliente", "customer.gender" : "Genero",
+                          "customer.SeniorCitizen": "Idoso", "customer.Partner": "Possui_parceiro",
+                          "customer.Dependents": "Possui_dependentes", "customer.tenure": "Meses_contrato",
+                          "phone.PhoneService": "Servico_telefonico", "phone.MultipleLines": "Multiplas_linhas",
+                          "internet.InternetService": "Internet", "internet.OnlineSecurity": "Seguranca_online",
+                          "internet.OnlineBackup": "backup_online", "internet.DeviceProtection": "Protecao_dispositivo",
+                          "internet.TechSupport": "suporte_tecnico_adcional", "internet.StreamingTV": "Streaming_TV",
+                          "internet.StreamingMovies": "Streaming_filmes", "account.Contract": "Contrato",
+                          "account.PaperlessBilling": "fatura_digital", "account.PaymentMethod": "Forma_pagamento",
+                          "account.Charges.Monthly": "Valor_mensal", "account.Charges.Total": "Total_pago"})
+
+```
+
+```{python}
+#criando coluna e calculando os gastos diario
+telecomx["Gasto_diario"] = ((telecomx["Total_pago"] / telecomx["Meses_contrato"]) /30).round(2)
+
+#inserindo a coluna na posição especifica
+telecomx.insert(19, "Gasto_diario", telecomx.pop("Gasto_diario"))
+
+```
+
+```{python}
+#tratando dos valor NAN, removendo da base de dados.
+telecomx = telecomx.dropna()
+
+```
+
+## Visão Geral da Taxa de Churn
+
+A taxa geral de churn da base analisada é de 26,6%, conforme demostra o gráfico "Distribuiçao por Churn", o que indica um pouco mais de um quarto dos clientes encerraram seus contratos com a empresa. Esse índice é representa um alerta importante para a companhia, pois evidencia uma perda considerável da base de clientes e possíveis impactos na receita recorrente.
+
+```{python}
+churn_percentual = telecomx["Churn"].value_counts(normalize = True)* 100
+genero_counts = telecomx["Genero"].value_counts()
+idoso_counts = telecomx["Idoso"].value_counts()
+dependentes_counts = telecomx["Possui_dependentes"].value_counts()
+
+fig = make_subplots(
+    rows=2, cols = 2,
+    specs=[[{"type": "domain"},{"type": "domain"}],
+           [{"type": "domain"}, {"type": "domain"}]],
+    subplot_titles= ["Distribuição por Churn",
+                     "Distribuição por Genêro",
+                     "Distribuição por Senioridade",
+                     "Distribuição  por Dependentes"],
+    horizontal_spacing=0.1,
+    vertical_spacing=0.2
+)
+
+fig.add_trace(go.Pie(labels = churn_percentual.index.map({"Yes":"Churn", "No": "Não Churn"}),
+                     values = churn_percentual.values, name = "Churn",
+                     textinfo ="label + percent" ,
+                     marker=dict(colors = ["#1f77b4", "#ff7f0e"])),row =1, col = 1)
+
+fig.add_trace(go.Pie(labels = genero_counts.index,
+                     values = genero_counts.values,
+                     name = "Genêro", textinfo = "label + percent",
+                    marker=dict(colors = ["#0000FF","#FF0000"])), row = 1, col=2)
+
+fig.add_trace(go.Pie(labels = idoso_counts.index.map({0:"Não Senior", 1: "Senior"}),
+                     values = idoso_counts.values,
+                     name = "Senioridade" ,
+                     textinfo = "label + percent",
+                     marker=dict(colors =["#0000FF","FF0000"])),row =2, col = 1)
+
+fig.add_trace(go.Pie(labels = dependentes_counts.index.map({"Yes": "Com Dependentes", "No": "Sem Dependentes"}),
+                     values= dependentes_counts.values,
+                     name = "Dependentes",
+                     textinfo = "label + percent",
+                     marker=dict(colors= ["#1f77b4", "#ff7f0e"])), row = 2, col = 2)
+
+
+fig.update_layout(
+    title_text = "Distribuição de Clientes",
+    title_x = 0.5,
+    height = 990,
+    width = 1000,
+    font=dict(size = 18),
+
+    showlegend=False
+
+
+)
+
+
+```
+
+### Gênero dos clientes
+
+A distribuiçao por gênero é bastante equilibrada, sendo 49,5% mulheres e 50,5% homens, conforme ilustrado no gráfico "Distribuição por genêro". Ao analisar a taxa de churn separadamente por gênero, não foram identificadas variações significativas,como mostram os gráficos "Taxa de Evasão por Genêro" e "Taxa percentual de Evasão por Genêro". Isso sugere que o gênero dos clientes não é um fator determinante para a evasão. Portanto, estratégias de retenção podem ser pensadas de forma unificada nesse aspecto, sem necessidade se segmentaçao por gênero.
+
+```{python}
+sexo =telecomx.groupby("Churn")["Genero"].value_counts().rename("num.absoluto")
+
+sexo_perc = telecomx.groupby("Churn")["Genero"].value_counts(normalize = True).mul(100).round(2).rename("Percentual")
+
+genero = pd.concat([sexo, sexo_perc], axis =1).reset_index()
+
+print("\nTabela Gênero\n")
+print(genero)
+
+```
+
+
+## Perfil Etário e Composição Familiar
+
+A maioria dos clientes (83,8%) tem menos de 65 anos, enquanto apenas 16,2% são idosos, conforme demonstrado no gráfico acima "Distribuição por Senioridade". A taxa de churn entre os clientes idosos é de 25,5%, praticamente o dobro da observada entre os não idosos (12,9%), como pode ser visto no gráfico abaixo "Taxa Percentual de Evasão por Senioridade". Esses dados indicam que a idade é um fator relevante na evasão de clientes.
+
+
+
+```{python}
+print("\n O percentual esta representado dentro de cada Churn(No e Yes\n)")
+
+#calculando  o total de churn entre idoso e não idoso
+contagem = telecomx.groupby("Churn")["Idoso"].value_counts().rename("Contagem")
+
+#calculando o percentual de churn entre idoso e nao idoso
+cont_percentual = telecomx.groupby("Churn")["Idoso"].value_counts(normalize = True).mul(100).round(2).rename("Percentual")
+
+tabela = pd.concat([contagem, cont_percentual], axis = 1)
+
+tabela = tabela.reset_index()
+
+tabela["Idoso"] = tabela["Idoso"].map({0: "No senior", 1: "Senior"})
+
+print("\nTabela faixa etaria\n")
+print(tabela)
+
+
+```
+
+
+Em relação à composição familiar, 70,2% dos clientes não possuem dependentes, enquanto 29,8% têm pelo menos um, conforme ilustrado no gráfico acima "Distribuição por Dependentes". No entanto, a presença de dependentes não apresenta impacto significativo na taxa de churn, como demonstrado no gráfico abaixo "Taxa Percentual de Evasão por Dependentes".
+
+
+```{python}
+dependentes =telecomx.groupby("Churn")["Possui_dependentes"].value_counts().rename("num.absoluto")
+
+dependentes_perc = telecomx.groupby("Churn")["Possui_dependentes"].value_counts(normalize = True).mul(100).round(2).rename("Percentual")
+
+tabela_dependentes = pd.concat([dependentes, dependentes_perc], axis =1).reset_index()
+
+print("\n Tabela Dependentes\n")
+print(tabela_dependentes)
+print("\nObs:O percentual esta representado dentro de cada Churn(No e Yes)\n")
+
+```
+
+Como percebemos na análise do perfil dos clientes, não há diferenças significativas entre os grupos analisados, com exceção dos clientes idosos, que apresentam uma taxa de churn mais alta em comparação aos não idosos. A TelecomX deve melhorar a acessibilidade no atendimento, promover campanhas segmentadas e oferecer benefícios exclusivos para reter esse perfil de cliente.
+
+```{python}
+fig,axs = plt.subplots(3,2, figsize = (18,10))
+fig.subplots_adjust(hspace = 0.5,wspace = 0.3)
+fig.suptitle("Análise da Evasão por Perfil", fontsize = 18, fontweight = "bold")
+
+
+sns.barplot(data = tabela, x= "Churn",y = "Contagem",  hue = "Idoso", ax = axs[0,0])
+axs[0,0].set_title("Taxa de Evasão por Senioridade de clientes")
+
+axs[0,0].yaxis.set_major_locator(plt.MultipleLocator(700))
+axs[0,0].set_ylim(0,5000)
+
+sns.barplot(data = tabela, x = "Churn", y = "Percentual", hue = "Idoso", ax = axs[0,1])
+axs[0,1].set_title("Taxa Percentual de Evasão por Senioridade")
+axs[0,1].set_ylim(0,100)
+
+
+sns.barplot(data = genero, x= "Churn",y= "num.absoluto" ,hue = "Genero", ax = axs[1,0])
+axs[1,0].set_title("Taxa de Evasão por Genêro")
+axs[1,0].set_ylim(0,3000)
+
+sns.barplot(data = genero, x = "Churn", y = "Percentual", hue = "Genero", ax = axs[1,1])
+axs[1,1].set_title("Taxa Percentual de Evasão por Genêro")
+axs[1,1].set_ylim(0,100)
+
+sns.barplot(data = tabela_dependentes, x = "Churn", y = "num.absoluto", hue = "Possui_dependentes", ax = axs[2,0])
+axs[2,0].set_title("Numeros de Evasão em Relação do clientes ter dependentes ou não")
+axs[2,0].set_ylim(0,3500)
+axs[2,0].yaxis.set_major_locator(MultipleLocator(500))
+
+sns.barplot(data = tabela_dependentes, x = "Churn", y = "Percentual", hue = "Possui_dependentes", ax = axs[2,1])
+axs[2,1].set_title("Taxa Percentual de Evasão por Dependentes")
+axs[2,1].set_ylim(0,100)
+
+
+#Usando o for para rotular todos os rotulos
+for row in axs:
+  for ax in row:
+    ax.spines[["top", "right"]].set_visible(False)#Removendo  as linhas de cima e da direita de todos os graficos
+
+    for container in ax.containers:
+      #especificando o rotulo de porcentagem
+      if ax  in (axs[0,1], axs[1,1], axs[2,1]):
+        ax.bar_label(container, fmt = "%.1f%%", label_type = "edge")
+      else:
+        ax.bar_label(container, fmt= "%.0f", label_type= "edge")
+
+
+plt.show()
+
+```
+
+
+A tabela "Gênero x Dependentes" e o gráfico "Evasão por Gênero e Dependentes" indicam que não há diferenças significativas entre os gêneros em relação ao churn. As taxas de evasão se mantêm semelhantes tanto para homens quanto para mulheres, independentemente de possuírem ou não dependentes. Isso sugere que o gênero e a presença de dependentes não são variáveis determinantes na decisão de cancelamento do serviço.
+
+
+```{python}
+perfil_demografico= telecomx.groupby(["Churn", "Genero", "Possui_dependentes"]).size().rename("Quantidade").reset_index()
+print("\nTabela Gênero x Dependentes\n")
+print(perfil_demografico)
+
+```
+
+Para complementar, é interessante observar que a uniformidade nas taxas de evasão entre os diferentes perfis reforça a ideia de que outros fatores, como a qualidade do serviço, a experiência do cliente ou questões financeiras, podem exercer influência mais significativa na decisão de cancelamento. Portanto, direcionar estratégias de retenção para esses aspectos pode ser mais eficaz do que segmentar por gênero ou composição familiar.
+
+```{python}
+g = sns.catplot(
+    data = perfil_demografico,
+    x = "Genero",
+    y = "Quantidade",
+    hue = "Possui_dependentes",
+    col = "Churn",
+    kind = "bar",
+    height= 5, # definindo a altura em polegada
+    aspect = 1  # definindo a razao altura/largura
+)
+
+g.fig.suptitle("Evasão por Genero e dependentes", fontsize = 20, fontweight = "bold")
+g.fig.subplots_adjust(top = 0.85)
+g._legend.set_bbox_to_anchor((1, 0.85))
+g._legend.set_loc("upper right")
+
+
+titulos ={"No": "Clientes que não evadiu", "Yes": "Clientes que se evadiram"}
+
+for ax in g.axes.flat:
+  texto = ax.get_title().split("=")[-1].strip()
+  ax.set_title(titulos[texto])
+  ax.set_ylim(0,1800)
+  for container in ax.containers:
+    ax.bar_label(container, fmt= "%.0f",label_type = "edge", padding = 2)
+
+```
+
+### Estado civil dos Clientes
+
+O estado civil dos clientes da Telecomx, representado pela variável Possui_parceiro, apresenta uma distribuição relativamente equilibrada: cerca de 51,75% dos clientes não possuem parceiro, enquanto 48,2% possuem. Essa divisão é relevante, pois pode influenciar o comportamento do cliente em relação à fidelização com a empresa, o uso dos serviços e, como veremos adiante, a taxa de churn. A seguir, aprofundamos essa análise observando a segmentação por gênero e a relação com a evasão de clientes.
+
+```{python}
+def demografico(df, columns):
+    agrupado = df.groupby(columns).size().reset_index(name="Qntd")
+    agrupado["Percentual(%)"] = (agrupado["Qntd"] / agrupado["Qntd"].sum() * 100).round(2)
+    return agrupado
+```
+
+```{python}
+estado_civil = demografico(telecomx, "Possui_parceiro")
+display(estado_civil)
+```
+
+Ao segmentar os dados por gênero e estado civil, percebemos que 25,60% da base total de clientes da Telecomx são mulheres que não possuem parceiro, enquanto 23,93% são mulheres com parceiro. Entre os homens, 26,15% dos clientes são do gênero masculino e não possuem parceiro, e 24,32% são homens com parceiro.
+
+Essa distribuição reforça o padrão observado na análise geral: há uma ligeira predominância de pessoas sem parceiro na base total. A leitura correta desses números exige atenção, já que os percentuais não representam divisões internas por gênero, e sim a composição proporcional de cada grupo dentro de todo o conjunto de clientes.
+
+```{python}
+
+estado_civil_por_genero = demografico(telecomx,["Genero", "Possui_parceiro"])
+print(estado_civil_por_genero)
+
+```
+
+
+Quando analisamos o churn segmentado pelo estado civil, o padrão se inverte: clientes com parceiro apresentam menor propensão a cancelar os serviços. Especificamente, 38,74% da base total são clientes que possuem parceiro e não deram churn, contra 34,68% sem parceiro e também retidos. Por outro lado, 17,06% dos clientes que cancelaram o serviço não tinham parceiro, enquanto apenas 9,51% tinham. Isso indica que ter um parceiro pode estar associado a maior estabilidade contratual e menor evasão, o que pode ser explorado em estratégias de marketing e retenção.
+
+```{python}
+
+churn_por_estado_civil = demografico(telecomx, ["Churn", "Possui_parceiro"])
+print(churn_por_estado_civil)
+```
+
+A análise do estado civil dos clientes da Telecomx mostra que a maior parte da base é composta por pessoas sem parceiro, tanto no geral quanto por gênero. No entanto, os dados de churn mostram que clientes com parceiro tendem a permanecer mais tempo na empresa, sugerindo uma correlação entre vínculo pessoal e fidelidade ao serviço. Esse tipo de informação pode ser valiosa para orientar campanhas personalizadas, especialmente se cruzada com outros dados como tempo de contrato ou serviços contratados.
+
+Gráfico disponível abaixo demonstra visualmente as relações destacadas nesta análise.
+
+```{python}
+fig7, axs7 = plt.subplots(3,2, figsize = (18,10))
+fig7.subplots_adjust(hspace = 0.5, wspace = 0.3)
+fig7.suptitle("Estado Civil", fontsize = 18, fontweight = "bold")
+
+sns.barplot(
+    data = estado_civil,
+    x = "Possui_parceiro",
+    y = "Qntd",
+    ax = axs7[0,0]
+)
+
+axs7[0,0].set_title("Estado Civil dos Clientes da Telecomx")
+axs7[0,0].set_ylim(0,4200)
+axs7[0,0].yaxis.set_major_locator(MultipleLocator(512))
+
+sns.barplot(
+    data = estado_civil,
+    x = "Possui_parceiro",
+    y = "Percentual(%)",
+    ax = axs7[0,1]
+)
+axs7[0,1].set_title("Proporção da Base de Clientes da Telecomx por Estado Civil")
+axs7[0,1].set_ylim(0,100)
+axs7[0,1].yaxis.set_major_locator(MultipleLocator(25))
+
+sns.barplot(
+    data = estado_civil_por_genero,
+    x = "Possui_parceiro",
+    y = "Qntd",
+    hue = "Genero",
+    ax = axs7[1,0]
+)
+
+axs7[1,0].set_title("Estado Civil por Gênero")
+axs7[1,0].set_ylim(0,2000)
+axs7[1,0].yaxis.set_major_locator(MultipleLocator(250))
+
+axs7[1,0].legend(
+    title="Gênero",
+    loc="upper right",
+    bbox_to_anchor=(1.08, 1.15)  # (x=1, y=1) é o canto superior direito do eixo
+)
+
+sns.barplot(
+    data = estado_civil_por_genero,
+    x = "Possui_parceiro",
+    y = "Percentual(%)",
+    hue = "Genero",
+    ax = axs7[1,1]
+)
+
+axs7[1,1].set_title("Proporção do Estado Civil por Gênero")
+axs7[1,1].set_ylim(0,100)
+axs7[1,1].yaxis.set_major_locator(MultipleLocator(25))
+
+axs7[1,0].legend(
+    title="Gênero",
+    loc="upper right",
+    bbox_to_anchor=(1, 1)  # (x=1, y=1) é o canto superior direito do eixo
+)
+
+sns.barplot(
+    data = churn_por_estado_civil,
+    x = "Possui_parceiro",
+    y = "Qntd",
+    hue = "Churn",
+    ax = axs7[2,0]
+)
+
+axs7[2,0].set_title("Churn por Estado civil")
+axs7[2,0].set_ylim(0,2800)
+axs7[2,0].yaxis.set_major_locator(MultipleLocator(350))
+
+axs7[2,0].legend(
+    title="Churn",
+    loc="upper right",
+    bbox_to_anchor=(1, 1)  # (x=1, y=1) é o canto superior direito do eixo
+)
+
+sns.barplot(
+    data = churn_por_estado_civil,
+    x = "Possui_parceiro",
+    y = "Percentual(%)",
+    hue = "Churn",
+    ax = axs7[2,1]
+)
+
+axs7[2,1].set_title("Taxa Percentual de Churn por Estado civil")
+axs7[2,1].set_ylim(0,100)
+axs7[2,1].yaxis.set_major_locator(MultipleLocator(20))
+
+axs7[2,1].legend(
+    title="Churn",
+    loc="upper right",
+    bbox_to_anchor=(1, 1)  # (x=1, y=1) é o canto superior direito do eixo
+)
+
+for row in axs7:
+  for ax in row:
+    ax.spines[["top", "right"]].set_visible(False)#Removendo  as linhas de cima e da direita de todos os graficos
+
+    for container in ax.containers:
+      #especificando o rotulo de porcentagem
+      if ax  in (axs7[0,1], axs7[1,1], axs7[2,1]):
+        ax.bar_label(container, fmt = "%.1f%%", label_type = "edge")
+      else:
+        ax.bar_label(container, fmt= "%.0f", label_type= "edge")
+
+plt.tight_layout()
+plt.show()
+
+```
+
+## Contrato e Duração
+
+A “tabela contrato” revela que os clientes demonstram uma clara preferência por contratos mensais, que representam mais de 50% da base ativa. Essa predominância evidencia uma busca por maior flexibilidade e liberdade na relação com o serviço. No entanto, essa escolha impacta diretamente a retenção de clientes, já que os vínculos de curta duração dificultam a criação de relacionamentos estáveis e comprometidos. Para a empresa, compreender essa distribuição inicial é essencial para orientar estratégias que considerem o comportamento predominante do público.
+
+```{python}
+contrato = telecomx["Contrato"].value_counts().reset_index(name = "Quantidade")
+
+contrato["Porcentagem"] = (telecomx["Contrato"].value_counts(normalize = True).reset_index(drop = True) * 100).round(2)
+
+
+print("\nTabela contrato")
+print(contrato)
+
+
+```
+
+O gráfico “Distribuição dos Tipos de Contrato” mostra que os contratos mensais concentram a maior parte dos clientes, enquanto planos de maior duração — como anuais e bienais — têm participação minoritária. Essa concentração em contratos curtos reduz a previsibilidade de receita, limitando o planejamento financeiro e estratégico da empresa. A baixa adesão a contratos longos compromete iniciativas de longo prazo e amplia a volatilidade da base de usuários. Incentivar a migração para modalidades mais duradouras pode fortalecer o vínculo com o cliente e melhorar a estabilidade da operação.
+
+```{python}
+
+fig = px.bar(contrato,
+                   x = "Contrato",
+                   y = "Quantidade",
+                   text_auto = True)
+fig.update_layout(
+    title_text="Distribuição dos Tipos de Contrato",
+    title_x=0.5,  # Centraliza o título
+    font=dict(size=18),
+    yaxis_title = "Quantidade de Contratos"
+)
+
+fig.show()
+
+```
+
+Conforme demonstrado no gráfico “Distribuição do Churn por Tempo de Contrato”, grande parte dos cancelamentos ocorre nos primeiros meses do relacionamento com a empresa. As taxas de churn são inicialmente elevadas e tendem a cair com o tempo, o que indica uma alta rotatividade nos contratos mensais, especialmente nas fases iniciais. Esse padrão reforça a necessidade de estratégias que aumentem o valor percebido logo após a contratação, como experiências personalizadas, comunicação ativa e vantagens exclusivas que estimulem a permanência logo no início da jornada do cliente.
+
+```{python}
+ fig =px.histogram(telecomx, x= "Meses_contrato", text_auto = True, color = "Churn", barmode = "group")
+fig.update_layout(title = {"text":"Distribuição do Churn por tempo de contrato",
+                           "x": 0.5, "font":{"size": 20}})
+
+```
+
+Complementando os três pontos anteriores, os contratos de maior duração — como os anuais e bienais — se mostram significativamente mais eficazes na retenção de clientes, apresentando taxas de churn muito inferiores às dos contratos mensais. O gráfico “Relação do Tempo de Contrato e Valores Pago Mensalmente para Evasão” evidencia que esses clientes, além de permanecerem por mais tempo, pagam valores mensais menores, o que torna o serviço mais atrativo financeiramente. Essa combinação de economia e maior permanência contribui para uma receita mais previsível e duradoura para a Telecomx, reforçando a importância de estratégias que incentivem o engajamento em contratos longos como forma de fortalecer a fidelização e reduzir a volatilidade da base de clientes.
+
+
+```{python}
+ fig = px.scatter(
+    data_frame = telecomx,
+    title = "Relação do tempo de contrato e valores pago mensalmente para evasão",
+    x = "Meses_contrato",
+    y = "Valor_mensal",
+    color = "Churn",
+    symbol = "Genero",
+    size= "Total_pago"
+)
+
+fig.update_layout(
+    legend = dict(
+        title="Legenda",
+        x = 1.05
+    )
+)
+fig.show()
+
+
+```
+
+
+## Seviços de Telefonia
+
+A grande maioria dos clientes da **Telecomx**(90,33%) já utilizou serviços de telefonia.Desses, 66,17% permancem ativos,enquanto 24,16% se evadiram. Além disso, 7,25% não usam mais os serviços de telefonia, mas continuam ativos em outros serviços da empresa. Um pequeno grupo de 2,42% nunca utilizou telefonia e já se evadiu, essas informações são demostradas no gráfico "Distribuição Percentual do Serviço Telefônico entre clients ativos e Evasivos".
+
+::: {.columns layout-ncol=2}
+
+```{python}
+servico_telefonico = pd.crosstab(
+    telecomx["Churn"],
+    telecomx["Servico_telefonico"],
+    margins = True,
+    margins_name = "Total",)
+
+print("Serviço Telefonico:\n")
+print(servico_telefonico)
+
+
+```
+
+```{python}
+telefonico = (pd.crosstab(
+    telecomx["Churn"],
+    telecomx["Servico_telefonico"],
+    normalize = True)* 100).round(2)
+
+print("\nPorcentagem do serviço telefonico\n")
+print(telefonico)
+
+
+```
+:::
+
+As tabelas de porcentagens por evasão e por serviço telefônico revelam padrões consistentes entre o uso da telefonia e as taxas de churn. A primeira tabela mostra que tanto entre os clientes que permaneceram (90,12%) quanto entre os que se evadiram (90,90%), a maioria utilizava serviços telefônicos, indicando que o churn não está diretamente relacionado à presença ou ausência desse serviço. Já a segunda tabela, que considera a proporção dentro de cada grupo de serviço, aponta que os clientes sem telefonia apresentam uma taxa de evasão ligeiramente menor (25%) em comparação aos que utilizam telefonia (26,75%). Essa leve diferença sugere que, embora a telefonia seja amplamente utilizada, ela não atua como um fator isolado na decisão de cancelamento, reforçando a ideia de que múltiplos elementos devem ser considerados na análise de churn, como o tipo de serviço contratado, a jornada do cliente e a satisfação geral com a empresa.
+
+::: {.columns layout-ncol=2}
+```{python}
+servico_telefonico_porc = (pd.crosstab(
+    telecomx["Churn"],
+    telecomx["Servico_telefonico"],
+    margins = True,
+    margins_name = "Total",
+    normalize = "index")*100 ).round(2)
+
+print("\nPorcentagem por evasão\n")
+print(servico_telefonico_porc)
+print("\nObs:A porcentagem da  tabela se soma em linha,\nfazendo referência as linhas representadas por churn(No/Yes)")
+
+
+```
+
+
+```{python}
+telefonia = (pd.crosstab(
+    telecomx["Churn"],
+    telecomx["Servico_telefonico"],
+    normalize = "columns")*100).round(2)
+
+print("\n Porcentagem de Churn em relação\n ao servico de telefônico\n")
+print(telefonia)
+print("\nObs:A porcentagem fazem referências \nas colunas Servio_telefonico\n")
+
+
+```
+:::
+
+Entre os clientes ativos, 5.163 utilizam serviços de telefonia, enquanto 510 permacem ativos, mas sem contratar telefonia, consumindo apenas outros serviços, conforme apresentado no gráfico "Serviços Telefonicos em números absolutos". Esses dados mostram a importância dos serviços de telefônicos para a base de clientes, ao mesmo tempo em que indicam oportunidades de retenção no segmentos que utiliza apenas outros serviços.
+
+
+```{python}
+serv_telefonico = pd.crosstab(
+    telecomx["Churn"],
+    telecomx["Servico_telefonico"])
+
+porc_servico_telefonico = (telecomx
+                           .groupby("Churn")
+                           ["Servico_telefonico"]
+                           .value_counts(normalize = True)
+                           .mul(100).round(2)
+                           .rename('Percentual')
+                           .reset_index())
+
+porc_telefonico = (telecomx
+                   .groupby(["Churn", "Servico_telefonico"])
+                   .size()
+                   .div(len(telecomx))
+                   .mul(100)
+                   .round(2)
+                   .reset_index(name = "Percentual"))
+
+porc_telefonia = (telecomx
+                  .groupby("Servico_telefonico")
+                  ["Churn"]
+                  .value_counts(normalize =True)
+                  .mul(100)
+                  .round(2)
+                  .rename("Percentual")
+                  .reset_index()
+) 
+
+
+```
+
+```{python}
+ fig1,axs1 = plt.subplots(2,2, figsize = (16,6))
+fig1.subplots_adjust(hspace = 0.5, wspace = 0.3, top = 0.85)
+fig1.suptitle("Análise de Evasão por Serviço telefonico", fontsize = 20,fontweight = "bold")
+
+
+serv_telefonico.plot(
+    kind = "bar",
+    stacked= True,
+    ax = axs1[0,0],
+
+)
+axs1[0,0].set_ylim(0,5250)
+axs1[0,0].set_title("Serviços Telefonicos em numeros absolutos", pad = 20)# pad aumenta o espaço entre o grafico e o titulo
+axs1[0,0].set_ylabel("Quantidade de clientes")
+axs1[0,0].legend(title ="Serviço Telefonico")
+axs1[0,0].yaxis.set_major_locator(MultipleLocator(475))
+
+sns.barplot(
+    data=porc_servico_telefonico,
+    x="Churn",
+    y="Percentual",
+    hue="Servico_telefonico",
+    ax=axs1[0,1]
+)
+
+axs1[0,1].set_title("Proporção de Evasão aos clientes de serviços telefônicos", pad = 20)
+axs1[0,1].legend(title="Serviço Telefônico")
+
+sns.barplot(
+    data = porc_telefonico,
+    x ="Churn",
+    y= "Percentual",
+    hue = "Servico_telefonico",
+    ax = axs1[1,0]
+)
+axs1[1,0].set_title("Distribuição Percentual do Serviço Telefônico entre Clientes Ativos e Evasivos", pad = 20)
+axs1[1,0].legend(title="Serviço Telefônico")
+
+sns.barplot(
+    data = porc_telefonia,
+    x = "Servico_telefonico",
+    y = "Percentual",
+    hue = "Churn",
+    ax= axs1[1,1]
+)
+
+axs1[1,1].set_title("Taxa de evasão entre assinantes e não assinantes do serviços de telefônia", pad = 20)
+
+for  row in axs1:
+    for ax in row:
+        ax.spines[["top","right"]].set_visible(False)
+        for cont in ax.containers:
+            try:
+
+                if ax in (axs1[0,1],axs1[1,0], axs1[1,1]):
+                    ax.bar_label(cont, fmt="%.2f%%", label_type="edge")
+                    ax.set_ylim(0,100)
+                else:
+                    ax.bar_label(cont, fmt="%.0f", label_type="edge")
+            except Exception:
+                pass  # ignora se não for gráfico de barra
+
+plt.tight_layout()
+plt.show()
+
+
+```
+
+## Serviços de Conexaçao à Internet
+
+A distribuição geral dos tipos de conexão a internet contratados pelos clientes da **Telecomx**, mostra que 44,02% utilizam fibra óptica; 34,36% usam DSL, enquanto 21,62% não possuem serviço de internet contratado.
+
+```{python}
+internet = pd.crosstab(telecomx["Churn"],
+            telecomx["Internet"],
+            margins = True,
+            margins_name= "Total")
+print("\nServiço de Internet\n")
+print(internet)
+```
+
+Entre os clientes ativos, observa-se que 37,90% utilizam DSL; 34,84% usam fibra óptica e 27,26% não contratam os serviços de conexão de internet com a **Telecomx**. esses dados estão apresentados no gráfico "Evasão x tipo de internet: Quem esta saindo e com Qual Conexão" e na tabela "Proporção de Serviços de Internet".
+
+```{python}
+internet_porc = (pd.crosstab(
+    telecomx["Churn"],
+    telecomx["Internet"],
+    margins = True,
+    margins_name = "Total",
+    normalize = "index") * 100).round(2)
+
+print("\nProporção de Serviço de Internet\n")
+print(internet_porc)
+print("\nOBS1: A tabela leva em consideraçao a taxa por evasão\n ")
+print("OBS2: A coluna total é  uma media ponderada em base no tamanho da amostra\n")
+```
+
+Já entre os clientes evadidos, o cenário é bem diferentes: 69,40% usavam fibra óptica e 24,56% utilizavam DSL, o que sugere uma associação relevante entre o tipo de conexão de internet e a evasão.Esses dados também são representados no gráfico "Evasão x tipo de internet: Quem esta saindo e com Qual Conexão" e na tabela "Proporção de Serviços de Internet".
+
+conforme demostrados no grafico "Qual Tipo de Internet Mais Perde Clientes", as taxas de churn por tipo de serviços de conexão à internet contratados são as seguintes:
+
+-   ***Fibra óptica***: 41,89% dos clientes que contrataram esse tipo de conexão acabaram saindo.
+
+-   ***DSL***: 19,00% dos clientes que usavam DSL evadiram.
+
+-   ***Sem internet***: apenas 7,43% dos que não contratavam o serviço de internet deixaram a empresa.
+
+```{python}
+servico_internet = (pd.crosstab(
+    telecomx["Churn"],
+    telecomx["Internet"],
+    normalize = "columns")*100
+
+).round(2)
+
+print("\nPorporção da taxa de evasão, por tipo de conexação de internet\n")
+print(servico_internet)
+```
+
+O serviço de internet, como um todo, apresenta taxas de churn elevadas, especialmente quando comparado aos clientes que não utilizam esse serviço. Dentro desse grupo, a fibra óptica se destaca negativamente, com a maior taxa de evasão entre os três perfis. Isso pode indicar insatisfação ou problemas técnicos específicos não evidenciados nos dados disponíveis.
+
+Além disso, o grande número de clientes ativos que utilizam internet da **Telecomx** monstra que há um potencial significativo de retenção e melhoria nesse serviço. Para entender melhor as causas da evasão, é fundamental realizar pesquisas com o clientes e entrevista com as áreas técnicas,visando identificar os principais fatores responsáveis por esse alto índice de churn.
+
+```{python}
+proporcao_por_tipo_de_internet = (pd.crosstab(
+    telecomx["Churn"],
+    telecomx["Internet"],
+    normalize = True) * 100
+).round(2)
+
+print("\n proporçao de assinantes para cada tipo de Serviço de Internet\n")
+print(proporcao_por_tipo_de_internet)
+```
+
+Com base nesse entendimento, poderemos não só reter os clientes atuais, como também expandir nossa base, oferecendo serviços de internet para os 27,26% de clientes ativos que ainda não utilizam esse serviços. Isso representa uma oportunidade clara de crescimento, tanto em receita quanto em penetração de mercado, fortalecendo o poscionamento da Telecomx no setor.
+
+
+```{python}
+graf_internet = telecomx.groupby("Churn")["Internet"].value_counts().reset_index(name = "NºClientes")
+
+graf_proporcao_internet = (telecomx.groupby("Churn")
+                          ["Internet"]
+                           .value_counts(normalize = True)
+                           .mul(100)
+                           .round(2)
+                           .rename("Percentual")
+                           .reset_index()
+)
+
+graf_proporcao_tipo_internet = (
+    telecomx.groupby(["Churn", "Internet"])
+    .size()
+    .div(len(telecomx))
+    . mul(100)
+    .round(2)
+    .rename("Percentual")
+    .reset_index()
+)
+
+graf_evasao_por_conexao = (
+    telecomx
+    .groupby("Internet")
+    ["Churn"]
+    .value_counts(normalize = True)
+    .mul(100)
+    .round(2)
+    .rename("Percentual")
+    .reset_index()
+)
+
+```
+
+```{python}
+fig2,axs2 = plt.subplots(2,2, figsize  =(18,8))
+fig2.subplots_adjust(hspace = 1,wspace =1)
+fig2.suptitle("Análise de Evasão por Serviço de Internet")
+
+sns.barplot(data =graf_internet, x = "Churn", y = "NºClientes", hue = "Internet",ax =axs2[0,0])
+axs2[0,0].set_title("Volume de Clientes por Conexão com Internet e Status de Churn")
+axs2[0,0].spines["top"].set_visible(False)
+axs2[0,0].spines["right"].set_visible(False)
+
+sns.barplot(data = graf_proporcao_internet, x = "Churn", y = "Percentual", hue = "Internet", ax = axs2[0,1] )
+axs2[0,1].set_title("Evasão x Tipo de Internet: Quem Está Saindo e com Qual Conexão?")
+axs2[0,1].set_ylim(0,100)
+axs2[0,1].set_ylabel("Percentual(%)")
+axs2[0,1].yaxis.set_major_locator(MultipleLocator(10))
+axs2[0,1].spines["top"].set_visible(False)
+axs2[0,1].spines["right"].set_visible(False)
+
+sns.barplot(data = graf_proporcao_tipo_internet, x = "Churn", y = "Percentual", hue = "Internet",ax = axs2[1,0] )
+axs2[1,0].set_title("Panorama Geral: Tipo de Internet por Situação de Evasão")
+axs2[1,0].set_ylim(0,100)
+axs2[1,0].set_ylabel("Percentual(%)")
+axs2[1,0].yaxis.set_major_locator(MultipleLocator(10))
+axs2[1,0].spines["top"].set_visible(False)
+axs2[1,0].spines["right"].set_visible(False)
+
+sns.barplot(data = graf_evasao_por_conexao, x = "Internet", y = "Percentual", hue = "Churn", ax = axs2[1,1])
+axs2[1,1].set_title("Qual Tipo de Internet Mais Perde Clientes?")
+axs2[1,1].set_ylim(0,100)
+axs2[1,1].set_xlabel("Tipo de conexão de Internet")
+axs2[1,1].set_ylabel("Percentual(%)")
+axs2[1,1].yaxis.set_major_locator( MultipleLocator(10))
+axs2[1,1].spines["top"].set_visible(False)
+axs2[1,1].spines["right"].set_visible(False)
+
+
+for row in axs2:
+    for ax in row:
+        for cont in ax.containers:
+            try:
+
+                if ax in (axs2[0,1],axs2[1,0], axs2[1,1]):
+                    ax.bar_label(cont, fmt="%.2f%%", label_type="edge")
+                else:
+                    ax.bar_label(cont, fmt="%.0f", label_type="edge")
+            except Exception:
+                pass  # ignora se não for gráfico de barra
+
+plt.tight_layout()
+plt.show()
+```
+
+## Perfis de Serviços e Comportamento do Consumidor.
+
+Os clientes com apenas serviços de telefonia apresentam o menor valor médio mensal, de aproximadamente R\$ 21,00. Já os que contratam o pacote completo(telefonia + fibra óptica + streaming TV e filmes) pagam, em média, R\$103,00, evidenciando o impacto direto do nível de serviço no faturamento.conforme apresentado na tabela "Tipo de serviço e valor e tempo médio de contrato"
+
+Em relação ao tempo médio de permanência:
+
+-   ***Telefonia + Fibra óptica***:21 meses
+
+-   ***DSL***:22 meses
+
+-   ***DSL + Telefonia + Streaming_TV e Filmes***: 49 meses
+
+-   ***DSL + Streaming_TV e Filmes***: 45 meses
+
+-   ***Fibra óptica + Telefonia + Streaming_TV e Filmes***: 44 meses 
+
+```{python}
+servicos = telecomx.groupby(["Internet", "Servico_telefonico","Streaming_TV","Streaming_filmes"])[["Valor_mensal", "Total_pago","Meses_contrato"]].mean().round().reset_index()
+print("\nTabela: Tipo de serviço e valor e tempo médios de contrato\n")
+display(servicos)
+
+
+```
+
+Ou seja, há grande variação de fidelização entre os perfis, com destaque para os planos baseados em DSL, que apresentam os maiores tempos médios de permanência.
+
+Entre os clientes ativos, os perfis mais comuns são:
+
+-   ***Apenas telefonia***: 27,25%
+
+-   ***Fibra óptica + Telefonia + Streaming_TV e Filmes***: 15,82%
+
+-   ***Telefonia + DSL***: 11,95%
+
+```{python}
+perfil_cliente = (
+    telecomx
+    .groupby(["Churn", "Servico_telefonico", "Internet", "Streaming_TV", "Streaming_filmes"])
+    .size()
+    .rename("count")
+    .reset_index()
+)
+
+perfil_cliente["Porcentagem"] = (
+    perfil_cliente
+    .groupby("Churn")["count"]
+    .transform(lambda x: (x / x.sum()) * 100)
+).round(2)
+
+perfil_cliente = perfil_cliente.drop(columns="count")
+
+# agora sim: filtra apenas churn = Yes
+perfil_cliente_yes = perfil_cliente[perfil_cliente["Churn"] == "Yes"]
+
+perfil_cliente_no = perfil_cliente[perfil_cliente["Churn"] == "No"]
+
+print("\nParticipação dos Serviços entre os Cliente que não Churnaram\n")
+display(perfil_cliente_no.sort_values(by= "Porcentagem", ascending = False))
+
+
+```
+
+Analisando o churn por perfil de serviço, os clientes com o pacote competo(Fibra óptica + Telefonia + Streaming TV e filmes) são os que mais contribuem para evasão, com 26,38% dos casos. Em seguida, os que usam telefonia + fibra óptica,com 22,58%. os demais perfis apresentam taxas de evasão mais baixas, inferiores a 11 %. Essas informações estão na tabela "Participação dos Serviços entre os Clientes que churnaram" e também no gráfico "Perfil das Assinaturas".
+
+
+```{python}
+print("Participação dos Serviços entre os Clientes que Churnaram\n")
+display(perfil_cliente_yes.sort_values(by="Porcentagem", ascending=False))
+```
+
+Esses dados mostram que perfis mais simples, como o de apenas telefonia, têm maior presença entre os clientes fiéis, enquanto os pacotes mais completos, apesar de gerarem maior receita, também contribuem mais para o churn, isso pode indicar problemas de percepção de valor, complexidade ou insatisfação com os serviços combinados.
+
+```{python}
+def gerar_perfil(row):
+    perfil = []
+
+    if row["Servico_telefonico"] == "Yes":
+        perfil.append("Telefonia")
+
+    if row["Internet"] == "DSL":
+        perfil.append("DSL")
+    elif row["Internet"] == "Fiber optic":
+        perfil.append("Fibra Ótica")
+
+    if row["Streaming_TV"] == "Yes":
+        perfil.append("Streaming TV")
+
+    if row["Streaming_filmes"] == "Yes":
+        perfil.append("Streaming Filmes")
+
+    return " | ".join(perfil)
+
+# Aplicar ao DataFrame
+perfil_cliente["Perfil_servico"] = perfil_cliente.apply(gerar_perfil, axis=1)
+
+#Separando em 2 grupos(Churn e no Churn)
+perfil_no = perfil_cliente[perfil_cliente["Churn"] == "No"].copy()
+perfil_yes = perfil_cliente[perfil_cliente["Churn"] == "Yes"].copy()
+
+
+ordem_no = (perfil_no
+         .groupby("Perfil_servico")["Porcentagem"]
+         .sum()
+         .sort_values(ascending = False)
+         .index
+         )
+
+ordem_yes = (perfil_yes
+             .groupby("Perfil_servico")["Porcentagem"]
+             .sum()
+             .sort_values(ascending = False)
+             .index
+             )
+
+#plotagem do grafico
+fig4, axs4 = plt.subplots(1,2,figsize = (18,10),sharex = False)
+fig4.subplots_adjust(hspace = 1, wspace = 1)
+sns.barplot(
+    data = perfil_no[perfil_no["Perfil_servico"].isin(ordem_no)],
+    y = "Perfil_servico",
+    x = "Porcentagem",
+    ax = axs4[0],
+    color = "blue",
+    order = ordem_no
+
+)
+axs4[0].set_title("Perfil das Assinaturas- Clientes que permaneceram(Churn = No)")
+axs4[0].set_xlabel("Porcentagem(%)")
+axs4[0].set_ylabel("Perfil do Serviços")
+axs4[0].set_xlim(0,100)
+axs4[0].xaxis.set_major_locator(MultipleLocator(5))
+axs4[0].grid(alpha = 0.3)
+axs4[0].spines["top"].set_visible(False)
+axs4[0].spines["right"].set_visible(False)
+
+sns.barplot(
+    data = perfil_yes[perfil_yes["Perfil_servico"].isin(ordem_yes)],
+    y = "Perfil_servico",
+    x = "Porcentagem",
+    ax= axs4[1],
+    color = "darkorange",
+    order = ordem_yes
+)
+
+axs4[1].set_title("Perfil das assinaturas dos clientes que saíram(Churn = Yes)")
+axs4[1].set_xlabel("Porcentagem(%)")
+axs4[1].set_ylabel("Perfil dos Serviços")
+axs4[1].set_xlim(0,100)
+axs4[1].xaxis.set_major_locator(MultipleLocator(5))
+axs4[1].grid(alpha = 0.3)
+axs4[1].spines["top"].set_visible(False)
+axs4[1].spines["right"].set_visible(False)
+
+#adicionando os valores na barra
+for ax in axs4:
+    for p in ax.patches:
+    # Verifica se o patch tem get_width (é uma barra)
+      if hasattr(p, 'get_width'):
+        width = p.get_width()
+        y = p.get_y() + p.get_height() / 2
+        if width > 0:
+            ax.text(
+                width + 1,
+                y,
+                f'{width:.2f}%',
+                va='center'
+            )
+
+
+plt.tight_layout()
+plt.show()
+
+```
+
+Além disso, os dados reforçam o impacto direto do serviços de internet na evasão, como já apontado anteriomente. Esse comportamento também pode ser observados na tabela:"Participação dos Serviços entre os Clientes que não Churnaram" e também no gráfico "Perfil das Assinaturas".
+
+```{python}
+
+# Padronizar para evitar erro de string
+servicos["Internet"] = servicos["Internet"].str.lower()
+servicos["Servico_telefonico"] = servicos["Servico_telefonico"].str.lower()
+servicos["Streaming_TV"] = servicos["Streaming_TV"].str.lower()
+servicos["Streaming_filmes"] = servicos["Streaming_filmes"].str.lower()
+
+combinacoes = [
+    {"Internet": "dsl", "Servico_telefonico": "no", "Streaming_TV": "no", "Streaming_filmes": "no"},
+    {"Internet": "dsl", "Servico_telefonico": "no", "Streaming_TV": "no", "Streaming_filmes": "yes"},
+    {"Internet": "dsl", "Servico_telefonico": "no", "Streaming_TV": "yes", "Streaming_filmes": "no"},
+    {"Internet": "dsl", "Servico_telefonico": "no", "Streaming_TV": "yes", "Streaming_filmes": "yes"},
+    {"Internet": "dsl", "Servico_telefonico": "yes", "Streaming_TV": "no", "Streaming_filmes": "no"},
+    {"Internet": "dsl", "Servico_telefonico": "yes", "Streaming_TV": "no", "Streaming_filmes": "yes"},
+    {"Internet": "dsl", "Servico_telefonico": "yes", "Streaming_TV": "yes", "Streaming_filmes": "no"},
+    {"Internet": "dsl", "Servico_telefonico": "yes", "Streaming_TV": "yes", "Streaming_filmes": "yes"},
+    {"Internet": "fiber optic", "Servico_telefonico": "yes", "Streaming_TV": "no", "Streaming_filmes": "no"},
+    {"Internet": "fiber optic", "Servico_telefonico": "yes", "Streaming_TV": "no", "Streaming_filmes": "yes"},
+    {"Internet": "fiber optic", "Servico_telefonico": "yes", "Streaming_TV": "yes", "Streaming_filmes": "no"},
+    {"Internet": "fiber optic", "Servico_telefonico": "yes", "Streaming_TV": "yes", "Streaming_filmes": "yes"},
+    {"Internet": "no", "Servico_telefonico": "yes", "Streaming_TV": "no internet service", "Streaming_filmes": "no internet service"},
+]
+
+metricas = ["Valor_mensal", "Total_pago", "Meses_contrato"]
+maximos = [120, 5000, 60]
+
+valores_normalizados = []
+legendas = []
+
+for i, f in enumerate(combinacoes, start=1):
+    cond = (
+        (servicos["Internet"] == f["Internet"]) &
+        (servicos["Servico_telefonico"] == f["Servico_telefonico"]) &
+        (servicos["Streaming_TV"] == f["Streaming_TV"]) &
+        (servicos["Streaming_filmes"] == f["Streaming_filmes"])
+    )
+
+    resultados = servicos.loc[cond]
+
+    if resultados.empty:
+        print(f"⚠️ Perfil {i} não encontrado. Pulando.")
+        continue
+
+    perfil = resultados.iloc[0]
+    valores = [perfil[m] for m in metricas]
+    normalizado = [v / m * 100 for v, m in zip(valores, maximos)]
+    normalizado.append(normalizado[0])
+
+    valores_normalizados.append(normalizado)
+    descricao = []
+    if f["Internet"] != "no":
+      descricao.append(f["Internet"].upper())
+    if f["Servico_telefonico"] == "yes":
+      descricao.append("Telefone")
+    if f["Streaming_TV"] == "yes":
+      descricao.append("Streaming TV")
+    if f["Streaming_filmes"] == "yes":
+      descricao.append("Streaming Filmes")
+
+    legendas.append(f"Perfil {i}: {', '.join(descricao)}")
+
+
+# Gerar os ângulos
+metricas_completa = metricas + [metricas[0]]
+angulos = np.linspace(0, 2 * np.pi, len(metricas_completa)).tolist()
+
+# Criar subplots lado a lado com 3 gráficos (até 4 perfis por radar)
+n_graficos = int(np.ceil(len(valores_normalizados) / 4))
+fig3, axs3 = plt.subplots(nrows=1, ncols=n_graficos, figsize=(11 * n_graficos, 11), subplot_kw=dict(polar=True))
+fig3.suptitle("Radar com os perfis dos clientes da Telecomx", fontsize = 30)
+
+if n_graficos == 1:
+    axs3 = [axs3]  # garante que axs seja iterável
+
+for g in range(n_graficos):
+    ax = axs3[g]
+    for j in range(g * 4, min((g + 1) * 4, len(valores_normalizados))):
+        ax.plot(angulos, valores_normalizados[j], label=legendas[j])
+        ax.fill(angulos, valores_normalizados[j], alpha=0.25)
+
+    ax.set_xticks(angulos[:-1])
+    ax.set_xticklabels(metricas, fontsize = 12)
+    ax.set_yticklabels([])
+    ax.set_title(f"Radar - Perfis {g*4+1} a {min((g+1)*4, len(valores_normalizados))}", size=18)
+    ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), fontsize = 11)
+
+plt.tight_layout()
+plt.show()
+
+
+```
+
+O gráfico "Radar com os perfis dos clientes da Telecomx", mostra com precisão o compartamento dos diversos perfis em relação ao valor médio mensal, média total de gastos e tempo de contrato.Através dele, é possível observar:
+
+-   Clientes com apenas telefonia: são mais fieis com baixo valor médio mensal;
+
+-   Planos DSL sem telefonia: também entregam boa fidelização, com leve aumento no valor médio;
+
+-   Planos DSL + telefonia: se destacam por equiparar alta fidelização, bom valor médio mensal;
+
+-   Perfil com fibra óptica: tendem a gerar valores mensais e totais mais alto, mas apresentam tempo de contrato.
+
+Esses padrões são cruciais para entender quais combinações de serviços geram valor sustentável para a empresa, e quais precisam de revisão para melhorar a retenção e o engajamento dos clientes.
+
+Entre os Top 10 perfis que mais geraram renda para a **Telecomx**, 8 possuem contrato de 2 anos, o que reforça o alto potencial de lucratividade dos contratos de longo prazo para empresa. Além disso, apenas 2 desses perfis utilizam conexão DSL, enquanto os demais são composto por clientes de fibra óptica, indicando uma forte relação entre tecnologia de internet mais avançada e maior receita
+
+
+```{python}
+telecomx["Perfil_servico"] = telecomx.apply(gerar_perfil,axis = 1)
+
+medias_por_perfil = (
+  telecomx.groupby(["Perfil_servico","Contrato", "Churn"])[["Valor_mensal", "Total_pago"]]
+  .mean()
+  .round(2)
+  .reset_index()
+)
+
+print("\nOs Top 10 Perfis Que Mais Geraram Renda Para a Telecomx ")
+
+display(medias_por_perfil.sort_values(by = "Total_pago", ascending = False).head(10))
+
+
+```
+
+Outro ponto importante é que todos os perfis incluem serviços de telefonia e pelo menos um serviços de streaming de tv e/ou filmes, demostrando que combinações mais completas contribuem diretamente para o faturamento da empresa.
+
+No entanto, mesmo entre perfis altamente lucrativo, 4 clientes acabaram se evadindo, o que evidencia que nem memso contratos longos ou pacotes robustos garantem retençao absolutas,reforçando a necessidade de monitoramento contínuo da experiência do cliente e ações de fidelização específicas para esse público premium.
+
+```{python}
+fig5 =px.scatter(
+    data_frame = medias_por_perfil,
+    title = "Medias de Valores gastos por perfil de Cliente e tempo de contrato",
+    x = "Total_pago",
+    y = "Valor_mensal",
+    color = "Perfil_servico",
+    symbol = "Contrato",
+    facet_row = "Churn"
+
+
+
+)
+
+fig5.update_layout(
+
+    title_font_size=20,
+    xaxis_title="Total Pago (R$)",
+    yaxis_title="Valor Mensal (R$)",
+    legend_title="Perfil de Serviço",
+    template="plotly_white"
+)
+fig5.show()
+
+
+```
+
+## Fatura e Forma de Pagamento
+
+Entre os clientes da Telecomx, 59,27% recebem fatura digital, enquanto 40,73% ainda utilizam fatura física.A taxa de churn entre os que recebem fatura digital é de 33,58%, quase o dobro da registrada entre os que recebem fatura física(16,37%), o que pode indicar uma relação entre o formato da cobrança e a evasão. conforme mostram as tabelas "Total de Faturas" e "Tipo de Faturas por Churn"
+
+```{python}
+
+tipo_fatura = (
+    telecomx["fatura_digital"]
+    .value_counts(normalize =False)
+    .rename_axis("fatura_digital")
+    .reset_index(name = "Quantidade")
+)
+
+tipo_fatura["Percentual"] = (
+    (tipo_fatura["Quantidade"] / tipo_fatura["Quantidade"].sum())* 100
+).round(2)
+
+print("\nTabela:Total de Fatura")
+print(tipo_fatura)
+
+
+```
+
+```{python}
+fatura_por_churn = telecomx.groupby("fatura_digital")["Churn"].value_counts().rename("Quantidade").reset_index()
+
+print("\nTabela: Tipo de Fatura por Churn")
+display(fatura_por_churn)
+
+
+```
+
+Quanto à forma de pagamento, a distribuição e as respectivas taxas de churn são:
+
+-   ***Electronic Check***(33,63% dos clientes): 45,28% de churn.
+
+-   ***Mailed Check***(22,81%):19,20% de churn
+
+-   ***Transferência bancária***(21,92%): aproximadamente 16%
+
+-   ***Cartão de crédito***(21,62%): aproximadamente 16% de churn.
+
+```{python}
+tipo_pagamento = telecomx["Forma_pagamento"].value_counts().rename("Quantidade").reset_index()
+
+tipo_pagamento["Percentual"] = (
+    (tipo_pagamento["Quantidade"] / tipo_pagamento["Quantidade"].sum())* 100
+).round(2)
+
+print("\nTabela:Tipo de Pagamento")
+display(tipo_pagamento)
+```
+
+```{python}
+formato_pagamento_por_churn = telecomx.groupby(["Forma_pagamento", "Churn"])["Forma_pagamento"].value_counts().rename("Quantidade").reset_index()
+
+print("\nTabela:Tipo de Pagamento por Churn")
+display(formato_pagamento_por_churn)
+
+
+```
+
+O pagamento via electronic check apresenta a pior taxa de retenção entre todas as formas, com mais de 45% dos usuarios abandonando o serviço, o que levanta um alerta sobre possíveis dificuldades ou insatisfação relacionadas a esse método. Já as formas automatizadas e digitais, como cartão de crédito e transferência bancária, mostram os melhores resultados em retenção.
+
+```{python}
+fig6,axs6 = plt.subplots(2,2, figsize=(18,10))
+fig6.subplots_adjust(hspace = 1, wspace = 1)
+fig6.suptitle("Análise de Tipo e Forma de Pagamentos", fontsize = 25)
+
+sns.barplot(data = tipo_fatura, x = "fatura_digital", y = "Quantidade", ax = axs6[0,0])
+axs6[0,0].set_title("Adoção da fatura digital por Clientes")
+axs6[0,0].set_ylim(0,5000)
+axs6[0,0].yaxis.set_major_locator(MultipleLocator(718))
+axs6[0,0].spines["top"].set_visible(False)
+axs6[0,0].spines["right"].set_visible(False)
+
+sns.barplot(data = fatura_por_churn, x = "fatura_digital",y = "Quantidade", hue = "Churn", ax = axs6[0,1])
+axs6[0,1].set_title("Tipo de Fatura por Churn")
+axs6[0,1].set_ylim(0,3000)
+axs6[0,1].yaxis.set_major_locator(MultipleLocator(425))
+axs6[0,1].spines["top"].set_visible(False)
+axs6[0,1].spines["right"].set_visible(False)
+
+sns.barplot(data =tipo_pagamento, x = "Forma_pagamento", y = "Quantidade", ax = axs6[1,0])
+axs6[1,0].set_title("Forma de Pagamento", )
+axs6[1,0].set_ylim(0,2550)
+axs6[1,0].yaxis.set_major_locator(MultipleLocator(425))
+axs6[1,0].spines["top"].set_visible(False)
+axs6[1,0].spines["right"].set_visible(False)
+
+sns.barplot(data = formato_pagamento_por_churn, x = "Forma_pagamento", y = "Quantidade", hue = "Churn", ax = axs6[1,1])
+axs6[1,1].set_title("Forma de Pagamento Por Churn")
+axs6[1,1].set_ylim(0,2200)
+axs6[1,1].yaxis.set_major_locator(MultipleLocator(425))
+axs6[1,1].spines["top"].set_visible(False)
+axs6[1,1].spines["right"].set_visible(False)
+
+for row in axs6:
+  for ax in row:
+    for cont in ax.containers:
+      try:
+        if ax in axs6:
+          ax.bar_label(cont, fmt="%.0f", label_type="edge")
+      except exception:
+        pass
+
+
+plt.tight_layout()
+plt.show()
+```
+
+Esses dados sugerem que ações voltadas para incentivar o uso de fatura física(ou revisão da experiência da fatura digital) e estimular formas de pagamentos com menor churn podem contribuir significativamente para a reduçao da evasão.
+
+### Relação entre Contrato e Forma de Pagamento
+
+A análise cruzando o tipo de contrato com a forma de pagamento releva uma relação clara entre duração do contrato e a taxa de churn: clientes com contratos mensais apresentam, consistentemente, os maiores índices de evasão, independentemente da forma de pagamento utilizada.
+
+```{python}
+#Salvando o arquivo pre tratado em formato csv
+telecomx.to_csv("telecomx.csv", index = False)
+
+#copiando o dados para outro DataFrame, para manter os dados segurados
+dados_telecomx = telecomx.copy()
+```
+
+```{python}
+colunas_binarias = [
+    "Churn",
+    "Possui_parceiro",
+    "Possui_dependentes",
+    "Servico_telefonico",
+    "fatura_digital"
+]
+
+mapeamento_binarios = {"Yes": 1, "No": 0}
+
+for col in colunas_binarias:
+  pass
+
+for col in colunas_binarias:
+  dados_telecomx[col] = dados_telecomx[col].map(mapeamento_binarios)
+
+
+```
+
+```{python}
+dados_telecomx["Assina_internet"] = dados_telecomx["Internet"].map(lambda x: 0 if x == "No" else 1)
+
+dados_telecomx.insert(10, "Assina_internet", dados_telecomx.pop("Assina_internet"))
+```
+
+```{python}
+# Colunas de serviços
+servicos = [
+    "Servico_telefonico", "Streaming_TV", "Streaming_filmes", "Assina_internet",
+    "backup_online", "Seguranca_online", "Protecao_dispositivo", "suporte_tecnico_adcional"
+]
+
+# Mapeamento para transformar Yes/No/etc em 1/0
+mapeamento_binario = {"Yes": 1, "No": 0, "No internet service": 0, "No phone service": 0}
+
+# Só aplica o map se a coluna ainda for do tipo "object" (texto)
+for col in servicos:
+    if dados_telecomx[col].dtype == "object":
+        dados_telecomx[col] = dados_telecomx[col].map(mapeamento_binario)
+
+# Agora pode somar com segurança
+dados_telecomx["Qtd_servicos"] = dados_telecomx[servicos].sum(axis=1).astype(int)
+
+
+dados_telecomx["Todos_servicos"] = (dados_telecomx["Qtd_servicos"] == len(servicos)).astype(int)
+```
+
+```{python}
+evasao_pg = dados_telecomx.groupby(["Forma_pagamento", "Contrato"])["Churn"].value_counts().rename("Quantidade").reset_index()
+
+print("\nTabela:Evasão por Tipo de Contrato e Forma de Pagamento")
+display(evasao_pg)
+```
+
+Por exemplo,entre os clientes que utilizam Electronic check:
+
+-   ***Contrato mensal***: churn de 53,73%
+
+-   ***Contrato anual***: churn de 18,44%
+
+-   ***Contrato bianual***: churn de 7,74%
+
+```{python}
+# Calculando percentual de churn (considerando churn = 1) por Forma_pagamento + Contrato
+tabela_churn = (
+    dados_telecomx
+    .groupby(["Forma_pagamento", "Contrato"])["Churn"]
+    .mean()  # média de churn = taxa de churn
+    .mul(100)
+    .round(2)
+    .unstack()  # Coloca "Contrato" nas colunas
+)
+```
+
+```{python}
+plt.figure(figsize=(12, 6))
+sns.heatmap(tabela_churn, annot=True, fmt=".2f", cmap="coolwarm", cbar_kws={'label': 'Churn (%)'})
+
+plt.title("Taxa de Churn (%) por Forma de Pagamento e Tipo de Contrato")
+plt.ylabel("Forma de Pagamento")
+plt.xlabel("Tipo de Contrato")
+plt.tight_layout()
+plt.show()
+```
+
+Esse padrão se repete em outras formas de pagamentos e reforça a ideia de que contratos mais longos promovem maior fidelização.
+
+Portanto, incentivar planos anuais e bianuais pode ser uma estratégia eficaz para reduzir o churn e melhorar a retenção, especialmente entre perfis de alto risco como os que usam Elextronic chech, que já apresenta as maiores taxas de evasão no geral.
+
+## Número de Serviços Contratados e Churn
+
+A **Telecomx** oferece ao todo 8 serviços distintos aos seus clientes, combinados em diferentes pacotes. A análise da relação entre o número de serviços contratados e a taxa de churn revela um padrão claro:quanto maior a quantidade de serviços utilizados pelo clientes, menor a taxa de evasão.
+
+As taxas de churn por números de serviços contratados são:
+
+-   ***1 serviço***: 9,25%
+
+-   ***2 serviços***: 51,58%
+
+-   ***5 serviços***: 27,26%
+
+Apesar de churn ser baixo entre clientes com apenas 1 serviço, ele explode quando o cliente contrata 2 serviços, e a taxa volta a cair à medida que mais serviços são incluídos no pacote, connforme visto na tabela "A Relação entre a Quantidade de Serviços Contratados por Churn".
+
+```{python}
+qntd_servicos_por_churn = (dados_telecomx.groupby(
+    ["Qtd_servicos", "Churn"])
+    .size()
+    .reset_index(name = "Quantidade")
+)
+
+print("\nTabela: A Relação entre a Quantidade de Serviços Contratados por Churn")
+print(qntd_servicos_por_churn)
+```
+
+Esse comportamento evidencia a importância de estratégias de cross-selling bem estruturadas, focadas não apenas em aumentar o númeors de serviços por cliente, mas também em personalizar pacotes de forma equilibrada e atrativa, evitando combinações que elevem o risco de evasão.
+
+```{python}
+# Plotando
+plt.figure(figsize=(18, 10))
+ax = sns.barplot(data=qntd_servicos_por_churn, x="Qtd_servicos", y="Quantidade", hue="Churn", palette="Set2")
+
+plt.title("Churn por Quantidade de Serviços Contratados", fontweight = "bold")
+plt.xlabel("Quantidade de Serviços")
+plt.ylabel("Número de Clientes")
+plt.gca().set_ylim(top = 1455)
+plt.gca().spines["top"].set_visible(False)
+plt.gca().spines["right"].set_visible(False)
+
+for p in ax.patches:
+    altura = p.get_height()
+    if not np.isnan(altura):  # segurança pra não escrever em barra nula
+        ax.text(
+            x=p.get_x() + p.get_width() / 2,
+            y=altura + 5,  # um pouco acima da barra
+            s=int(altura),
+            ha='center',
+            va='bottom',
+            fontsize=10,
+            fontweight='bold'
+        )
+
+plt.tight_layout()
+
+plt.show()
+```
+
+A personalização da oferta e o acompanhamento da jornada do cliente são essenciais para aumentar o engajamento e reduzir o churn entre os perfis intermediários.
+
+## Considerações Finais
+
+A análise revelou padrões claros de comportamento e risco de evasão(churn) dentro da base de clientes da **Telecomx**. O cruzamento de variáveis demográficas, contratuais e de uso dos serviços permitiu identificar perfis críticos, serviços mais vulneráveis e oportunidades de fidelização.
+
+***Principais descobertas***:
+
+-   Usuários de internet fibra óptica enfrentam a maior taxa de evasão entre todos os tipos de serviço, inclusive nos pacotes mais caros e completos.
+
+-   Idosos, embora representem uma parte menor da base, demonstram uma taxa de churn desproporcionalmente alta.
+
+-   Formas de pagamentos como "Electronic check" e fatura digital apresentam churn significativamente acida da média, sugerindo problemas de experiência ou falhas operacionais.
+
+-   Contratos mensais se confirmam como o principal ponto de fragilidade, com evasão muito acima dos contratos de longo prazo.
+
+-   Por outro lado, quanto maior a quantidade de serviços contratados, menor a chance de churn, reforçando a importância de estratégias de cross-selling e fidelização personalizada.
+
+Esses resultados indicam que o churn não está apenas associados a fatores isolados, mas sim a combinações específicas de perfil,serviço, forma de pagamento e tempo de contrato. A personalização das ofertas e da comunicação será essencial para aumentar a retenção.
+
+### Ações Recomendadas
+
+1.  Investigar causas do alto churn entre clientes de internet fibra óptica
+
+-   Taxa de churn entre usuários de fibra óptica é de 41,89%, especialmente em pacotes robustos.
+
+-   Recomenda-se:
+
+    -   Aplicar pesquisas de satisfação.
+
+    -   Realizar entrevista com ex-clientes.
+
+    -   Analisar chamados técnicos.
+
+2.  Revisar o modelo de faturamento digital
+
+-   Churn com fatura digital: 33,58%
+
+-   Churn com fatura física: 16,37%
+
+-   Sugestões:
+
+    -   Verificar entrega e legibilidade dos boletos digitais.
+
+    -   Avaliar problemas em e-mails, apps e notificações.
+
+    -   Testar envio multicanal(WhatsaApp, SMS, aplicativo).
+
+3.  Atenção ao perfil de cliente idoso
+
+-   Representa 16,2% da base, mas com churn elevado(25,5%).
+
+-   Ações possíveis:
+
+    -   Criar pacotes com atendimentos simplificados.
+
+    -   Desenvolver campanhas de reteção direcionadas
+
+    -   Avaliar suporte técnico e digital para esse público.
+
+4.  Incentivar planos de longa duração
+
+-   Contratos mensais concenram a maioria dos casos de churn
+
+-   Sugestões:
+
+    -   Oferecer benefícios exclusivos para planos anuais/bianuais.
+
+    -   Aplicar descontos progressivos.
+
+    -   Comunicar bem os diferenciais dos planos longos
+
+5.  Reavaliar o método de pagamentos "electronic check"
+
+-   É o mais usado(33,63%), mas com maior churn:45,28%
+
+-   Recomenda-se:
+
+    -   Mapear problemas técnicos com esse método
+
+    -   Comparar taxas de atraso e cancelamento
+
+    -   Estudar incentivos para migração a métodos automáticos
+
+6.  Promover estratégias de cross-selling de serviços
+
+-   Mais serviços = menor churn:
+
+    -   2 serviços: 51,58%
+
+    -   8 serviços: 5,79%
+
+-   Açoes recomendadas:
+
+    -   Oferecer pacotes personalizados.
+
+    -   Usar dados para sugerir serviços complementares.
+
+    -   Rodar campanhas de upgrades e fidelização
+
+7.  Monitorar perfis com maior evasão entre pacotes combinados
+
+-   Pacotes com telefonia + fibra + streaming concentrma mais churn
+
+-   Estratégias:
+
+    -   Avaliar experiência dos serviços integrados.
+
+    -   Testar diferentes combinaçoes de preços/benefícios.
+
+    -   Medir o NPS(Net Promoter Score) por perfil
+
+8.   Estudar viabilidade de planos familiares
+
+-   70,2% dos clientes não têm dependentes vinculados.
+
+-   Sugestões:
+
+    -   Criar planos familiares com preços atrativos.
+
+    -   Testar campanhas piloto regionalizadas.
+
+    -   Estimular vínculo familiar como estratégia de retenção.
